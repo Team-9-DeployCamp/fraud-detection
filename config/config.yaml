@@ -37,3 +37,53 @@ test_set_path:
   - dataset/processed/X_test.pkl
   - dataset/processed/y_test.pkl
 
+train_processed_set_path:
+  - dataset/processed/X_train_processed.pkl
+  - dataset/processed/y_train_processed.pkl
+
+train_processed_log_set_path:
+  - dataset/processed/X_train_processed_log.pkl
+  - dataset/processed/y_train_processed_log.pkl
+
+train_processed_SMOTE_set_path:
+  - dataset/processed/X_train_processed_SMOTE.pkl
+  - dataset/processed/y_train_processed_SMOTE.pkl
+
+train_processed_log_SMOTE_set_path:
+  - dataset/processed/X_train_processed_log_SMOTE.pkl
+  - dataset/processed/y_train_processed_log_SMOTE.pkl
+
+valid_processed_set_path:
+  - dataset/processed/X_valid_processed.pkl
+  - dataset/processed/y_valid_processed.pkl
+
+valid_processed_log_set_path:
+  - dataset/processed/X_valid_processed_log.pkl
+  - dataset/processed/y_valid_processed_log.pkl
+
+test_processed_set_path:
+  - dataset/processed/X_test_processed.pkl
+  - dataset/processed/y_test_processed.pkl
+
+test_processed_log_set_path:
+  - dataset/processed/X_test_processed_log.pkl
+  - dataset/processed/y_test_processed_log.pkl
+
+
+features:
+- amount 
+- merchant_type_electronics 
+- merchant_type_groceries
+- merchant_type_others 
+- merchant_type_travel 
+- device_type_mobile
+- device_type_tablet
+
+features_log:
+- merchant_type_electronics 
+- merchant_type_groceries
+- merchant_type_others 
+- merchant_type_travel 
+- device_type_mobile
+- device_type_tablet
+- log_amount
