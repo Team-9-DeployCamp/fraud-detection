@@ -69,6 +69,7 @@ test_processed_log_set_path:
   - dataset/processed/X_test_processed_log.pkl
   - dataset/processed/y_test_processed_log.pkl
 
+production_model_path: models/dt_model_selected.pkl
 
 features:
 - amount 
