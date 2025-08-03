@@ -88,3 +88,12 @@ features_log:
 - device_type_mobile
 - device_type_tablet
 - log_amount
+
+mlflow:
+  tracking_uri: "http://127.0.0.1:5000"
+  experiment_name: "fraud-detection"
+data:
+  X_train: "dataset/processed/X_train_processed.pkl"
+  y_train: "dataset/processed/y_train.pkl"
+  X_valid: "dataset/processed/X_test_processed.pkl"
+  y_valid: "dataset/processed/y_test.pkl"

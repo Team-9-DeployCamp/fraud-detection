@@ -1,0 +1,15 @@
+artifact_uri: mlflow-artifacts:/919612354646081747/95bcda7a7fd743fa94e8dce3c47ceece/artifacts
+end_time: 1754242511711
+entry_point_name: ''
+experiment_id: '919612354646081747'
+lifecycle_stage: active
+run_id: 95bcda7a7fd743fa94e8dce3c47ceece
+run_name: dt_csl
+run_uuid: 95bcda7a7fd743fa94e8dce3c47ceece
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1754242507099
+status: 3
+tags: []
+user_id: Utandra
