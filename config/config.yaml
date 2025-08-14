@@ -37,3 +37,7 @@ test_set_path:
   - dataset/processed/X_test.pkl
   - dataset/processed/y_test.pkl
 
+# Model and encoder paths
+model_path: src/models/fraud_detection_model.pkl
+merchant_encoder_path: src/models/merchant_encoder.pkl
+device_encoder_path: src/models/device_encoder.pkl
