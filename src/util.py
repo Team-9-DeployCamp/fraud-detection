@@ -3,17 +3,17 @@ import joblib
 from datetime import datetime
 import os
 
-# Get the absolute path to the config file
-script_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(script_dir)
-config_dir = os.path.join(project_root, 'configs', 'config', 'config.yaml')
-
 def time_stamp() -> datetime:
     # Return current date and time
     return datetime.now()
 
 def load_config() -> dict: 
     # Try to load yaml file
+    # Get the absolute path to the config file
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    config_dir = os.path.join(project_root, 'configs', 'config', 'config.yaml')
+
     try:
         with open(config_dir, "r") as file:
             config = yaml.safe_load(file)
