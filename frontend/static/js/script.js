@@ -1,5 +1,5 @@
-// Configuration
-const API_BASE_URL = 'http://localhost:8000';
+// Configuration - Dynamic API URL based on current host
+const API_BASE_URL = `${window.location.protocol}//${window.location.hostname}:8000`;
 
 // DOM Elements
 const fraudForm = document.getElementById('fraudForm');
