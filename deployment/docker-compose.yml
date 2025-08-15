@@ -41,6 +41,7 @@ services:
       - ../models:/app/models
       - ../configs:/app/configs
       - ../dataset:/app/dataset
+      - ../mlruns:/app/mlruns
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow-server:5000
     depends_on:

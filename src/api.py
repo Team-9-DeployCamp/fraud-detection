@@ -18,8 +18,10 @@ import uvicorn
 # Load config
 cfg = load_config()
 
-# Setup MLflow
-mlflow.set_tracking_uri(cfg["mlflow"]["tracking_uri"])
+# Setup MLflow - use environment variable for Docker containers
+mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", cfg["mlflow"]["tracking_uri"])
+print_debug(f"🔧 Setting MLflow URI: {mlflow_uri}")
+mlflow.set_tracking_uri(mlflow_uri)
 
 app = FastAPI(
     title="Fraud Detection API with MLflow",
@@ -69,14 +71,15 @@ class MLflowFraudPredictor:
             raise
     
     def load_best_model(self):
-        """Load the best model from MLflow"""
+        """Load the best model from MLflow with robust fallback"""
         try:
             # Get experiment
-            experiment = mlflow.get_experiment_by_name(self.config["mlflow"]["experiment_name"])
+            experiment_name = self.config["mlflow"]["experiment_name"]
+            print_debug(f"🔍 Looking for experiment: {experiment_name}")
+            experiment = mlflow.get_experiment_by_name(experiment_name)
             
             if not experiment:
                 print_debug("⚠ Experiment not found, using model from inference.py")
-                # Use model from inference predictor
                 self.model = self.inference_predictor.model
                 self.model_info = {
                     "model_source": "inference_predictor",
@@ -84,6 +87,8 @@ class MLflowFraudPredictor:
                 }
                 print_debug("✓ Model loaded from inference predictor")
                 return True
+            
+            print_debug(f"✓ Found experiment ID: {experiment.experiment_id}")
             
             # Search for best run based on F1 score
             runs = mlflow.search_runs(
@@ -101,23 +106,84 @@ class MLflowFraudPredictor:
             
             best_run = runs.iloc[0]
             run_id = best_run['run_id']
+            print_debug(f"🔍 Best run ID: {run_id}")
             
-            # Load model from MLflow
-            model_uri = f"runs:/{run_id}/model"
-            self.model = mlflow.sklearn.load_model(model_uri)
+            # Try multiple approaches to load the model
+            model_loaded = False
             
-            # Store model info
-            self.model_info = {
-                "run_id": run_id,
-                "model_variant": best_run.get('tags.model_variant', 'unknown'),
-                "f1_score": float(best_run['metrics.valid_f1']),
-                "accuracy": float(best_run['metrics.valid_accuracy']),
-                "model_uri": model_uri,
-                "model_source": "mlflow"
-            }
+            # Method 1: Standard MLflow URI
+            if not model_loaded:
+                try:
+                    model_uri = f"runs:/{run_id}/model"
+                    print_debug(f"🔍 Trying standard URI: {model_uri}")
+                    self.model = mlflow.sklearn.load_model(model_uri)
+                    print_debug("✓ Model loaded from standard MLflow URI")
+                    model_loaded = True
+                except Exception as e:
+                    print_debug(f"✗ Standard URI failed: {e}")
             
-            print_debug(f"✓ Model loaded from MLflow: {self.model_info['model_variant']}")
-            print_debug(f"✓ F1-Score: {self.model_info['f1_score']:.4f}")
+            # Method 2: Direct file path (for Docker containers)
+            if not model_loaded:
+                try:
+                    # Try absolute path in container
+                    artifact_path = f"/app/mlruns/{experiment.experiment_id}/{run_id}/artifacts/model"
+                    print_debug(f"🔍 Trying container path: {artifact_path}")
+                    if os.path.exists(artifact_path):
+                        self.model = mlflow.sklearn.load_model(artifact_path)
+                        print_debug("✓ Model loaded from container path")
+                        model_loaded = True
+                    else:
+                        print_debug(f"✗ Container path not found: {artifact_path}")
+                except Exception as e:
+                    print_debug(f"✗ Container path failed: {e}")
+            
+            # Method 3: Relative path
+            if not model_loaded:
+                try:
+                    artifact_path = f"./mlruns/{experiment.experiment_id}/{run_id}/artifacts/model"
+                    print_debug(f"🔍 Trying relative path: {artifact_path}")
+                    if os.path.exists(artifact_path):
+                        self.model = mlflow.sklearn.load_model(artifact_path)
+                        print_debug("✓ Model loaded from relative path")
+                        model_loaded = True
+                    else:
+                        print_debug(f"✗ Relative path not found: {artifact_path}")
+                except Exception as e:
+                    print_debug(f"✗ Relative path failed: {e}")
+            
+            if model_loaded:
+                # Store model info
+                self.model_info = {
+                    "run_id": run_id,
+                    "model_variant": best_run.get('tags.model_variant', 'unknown'),
+                    "f1_score": float(best_run['metrics.valid_f1']),
+                    "accuracy": float(best_run['metrics.valid_accuracy']),
+                    "model_uri": model_uri,
+                    "model_source": "mlflow"
+                }
+                
+                print_debug(f"✓ Model loaded from MLflow: {self.model_info['model_variant']}")
+                print_debug(f"✓ F1-Score: {self.model_info['f1_score']:.4f}")
+                return True
+            else:
+                print_debug("⚠ All MLflow methods failed, using inference fallback")
+                raise Exception("All MLflow loading methods failed")
+                
+        except Exception as e:
+            print_debug(f"✗ Error loading model from MLflow: {e}")
+            print_debug("Trying fallback to inference predictor...")
+            try:
+                self.model = self.inference_predictor.model
+                self.model_info = {
+                    "model_source": "inference_fallback",
+                    "model_type": type(self.model).__name__,
+                    "error": str(e)
+                }
+                print_debug("✓ Model loaded from inference fallback")
+                return True
+            except Exception as inference_error:
+                print_debug(f"✗ Inference fallback also failed: {inference_error}")
+                return False
             
             return True
             
@@ -248,12 +314,75 @@ def health_check():
         return {
             "status": "healthy",
             "api_ready": True,
-            "mlflow_uri": cfg["mlflow"]["tracking_uri"]
+            "mlflow_uri": cfg["mlflow"]["tracking_uri"],
+            "mlflow_env": os.getenv("MLFLOW_TRACKING_URI"),
+            "current_mlflow_uri": mlflow.get_tracking_uri()
         }
     except Exception as e:
         return {
             "status": "unhealthy",
             "error": str(e)
+        }
+
+@app.get("/debug/mlflow")
+def debug_mlflow():
+    """Debug endpoint to test MLflow connection and paths"""
+    try:
+        result = {
+            "tracking_uri_config": cfg["mlflow"]["tracking_uri"],
+            "tracking_uri_env": os.getenv("MLFLOW_TRACKING_URI"),
+            "tracking_uri_current": mlflow.get_tracking_uri(),
+            "experiment_name": cfg["mlflow"]["experiment_name"]
+        }
+        
+        # Check if mlruns exists
+        mlruns_paths = [
+            "/app/mlruns",
+            "./mlruns",
+            "mlruns"
+        ]
+        
+        for path in mlruns_paths:
+            result[f"path_exists_{path.replace('/', '_').replace('.', 'dot')}"] = os.path.exists(path)
+        
+        # Try to get experiment
+        try:
+            experiment = mlflow.get_experiment_by_name(cfg["mlflow"]["experiment_name"])
+            if experiment:
+                result["experiment_found"] = True
+                result["experiment_id"] = experiment.experiment_id
+                
+                # List available runs
+                runs = mlflow.search_runs(
+                    experiment_ids=[experiment.experiment_id],
+                    max_results=3
+                )
+                result["runs_count"] = len(runs)
+                
+                if len(runs) > 0:
+                    result["sample_run_id"] = runs.iloc[0]["run_id"]
+                    
+                    # Check model paths
+                    run_id = runs.iloc[0]["run_id"]
+                    model_paths = [
+                        f"/app/mlruns/{experiment.experiment_id}/{run_id}/artifacts/model",
+                        f"./mlruns/{experiment.experiment_id}/{run_id}/artifacts/model",
+                        f"mlruns/{experiment.experiment_id}/{run_id}/artifacts/model"
+                    ]
+                    
+                    for path in model_paths:
+                        result[f"model_path_exists_{path.replace('/', '_').replace('.', 'dot')}"] = os.path.exists(path)
+            else:
+                result["experiment_found"] = False
+        except Exception as exp_error:
+            result["experiment_error"] = str(exp_error)
+        
+        return result
+    except Exception as e:
+        import traceback
+        return {
+            "error": str(e),
+            "traceback": traceback.format_exc()
         }
 
 @app.get("/models")

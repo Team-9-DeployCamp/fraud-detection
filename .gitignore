@@ -3,5 +3,3 @@ fraud_venv/
 logs.log
 __pycache__/
 catboost_info/
-mlruns/
-mlflow.db
