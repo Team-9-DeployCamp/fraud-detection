@@ -90,7 +90,7 @@ def train_tree_model():
     assert list(X_train.columns) == list(X_valid.columns) == list(X_test.columns), "Column mismatch between datasets"
     
     # Create models directory if not exists
-    os.makedirs('src/models', exist_ok=True)
+    os.makedirs('models', exist_ok=True)
     
     # Load tuned parameters
     with open("dt_tuned_params.json") as f:
@@ -222,7 +222,7 @@ def train_tree_model():
     best_model.fit(X_train, y_train)
     
     # Save best model
-    best_model_path = f"src/models/{best_model_name}_best.pkl"
+    best_model_path = f"models/{best_model_name}_best.pkl"
     pickle_dump(best_model, best_model_path)
     print_debug(f"✓ Best model saved to: {best_model_path}")
     

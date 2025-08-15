@@ -38,10 +38,10 @@ test_set_path:
   - dataset/processed/y_test.pkl
 
 # Model and encoder paths
-model_path: src/models/fraud_detection_model.pkl
-production_model_path: src/models/dt_tuned_best.pkl
-merchant_encoder_path: src/models/merchant_encoder.pkl
-device_encoder_path: src/models/device_encoder.pkl
+model_path: models/fraud_detection_model.pkl
+production_model_path: models/dt_tuned_best.pkl
+merchant_encoder_path: models/merchant_encoder.pkl
+device_encoder_path: models/device_encoder.pkl
 
 mlflow:
   tracking_uri: http://mlflow-server:5000

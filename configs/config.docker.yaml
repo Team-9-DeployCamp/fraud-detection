@@ -34,9 +34,9 @@ data_split:
   random_state: 42
 
 # Model and encoder paths
-model_path: src/models/fraud_detection_model.pkl
-merchant_encoder_path: src/models/merchant_encoder.pkl
-device_encoder_path: src/models/device_encoder.pkl
+model_path: models/fraud_detection_model.pkl
+merchant_encoder_path: models/merchant_encoder.pkl
+device_encoder_path: models/device_encoder.pkl
 
 # MLflow configuration for Docker
 mlflow:

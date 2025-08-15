@@ -16,9 +16,11 @@ RUN pip install --upgrade pip && \
 
 # Copy application code
 COPY src ./src
-COPY config ./config
+COPY configs ./configs
 COPY models ./models
 COPY dataset ./dataset
+COPY frontend ./frontend
+COPY mlruns ./mlruns
 
 # Expose API port
 EXPOSE 8000
