@@ -1,5 +1,19 @@
-// Configuration - Dynamic API URL based on current host
-const API_BASE_URL = `${window.location.protocol}//${window.location.hostname}:8000`;
+// Configuration - Dynamic API URL with proper port handling
+function getApiBaseUrl() {
+    const protocol = window.location.protocol;
+    const hostname = window.location.hostname;
+    const currentPort = window.location.port;
+    
+    // If we're on port 8000, API is on same port
+    // If we're on different port, API is likely on 8000
+    const apiPort = (currentPort === '8000' || hostname === 'localhost') ? '8000' : '8000';
+    
+    return `${protocol}//${hostname}:${apiPort}`;
+}
+
+const API_BASE_URL = getApiBaseUrl();
+
+console.log('API Base URL:', API_BASE_URL);
 
 // DOM Elements
 const fraudForm = document.getElementById('fraudForm');
@@ -95,16 +109,27 @@ function hideInputError(input) {
 
 // Check API health
 async function checkAPIHealth() {
+    console.log('Checking API health at:', `${API_BASE_URL}/health`);
+    
     try {
-        const response = await fetch(`${API_BASE_URL}/health`);
+        const response = await fetch(`${API_BASE_URL}/health`, {
+            method: 'GET',
+            mode: 'cors',
+        });
+        
         if (response.ok) {
-            console.log('API is healthy');
+            const healthData = await response.json();
+            console.log('API is healthy:', healthData);
         } else {
-            console.warn('API health check failed');
+            console.warn('API health check failed:', response.status, response.statusText);
         }
     } catch (error) {
         console.error('API is not accessible:', error);
-        showError('API is not accessible. Please make sure the fraud detection service is running.');
+        
+        // Show user-friendly error for network issues
+        if (error.name === 'TypeError' && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
+            showError(`Cannot connect to fraud detection service at ${API_BASE_URL}. Please check if the server is running and accessible.`);
+        }
     }
 }
 
@@ -176,20 +201,44 @@ function getFormData() {
 
 // Predict fraud via API
 async function predictFraud(data) {
-    const response = await fetch(`${API_BASE_URL}/predict`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data)
-    });
+    console.log('Making API request to:', `${API_BASE_URL}/predict`);
+    console.log('Request data:', data);
     
-    if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+    try {
+        const response = await fetch(`${API_BASE_URL}/predict`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+            },
+            body: JSON.stringify(data),
+            mode: 'cors', // Explicitly set CORS mode
+        });
+        
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers);
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        console.log('API response:', result);
+        return result;
+        
+    } catch (error) {
+        console.error('API request failed:', error);
+        
+        // Provide more specific error messages
+        if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+            throw new Error(`Cannot connect to API server at ${API_BASE_URL}. Please check if the server is running.`);
+        } else if (error.name === 'TypeError' && error.message.includes('NetworkError')) {
+            throw new Error(`Network error: Cannot reach API server at ${API_BASE_URL}`);
+        } else {
+            throw error;
+        }
     }
-    
-    return await response.json();
 }
 
 // Show loading indicator
