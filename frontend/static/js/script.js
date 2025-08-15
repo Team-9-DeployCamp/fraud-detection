@@ -4,15 +4,14 @@ function getApiBaseUrl() {
     const hostname = window.location.hostname;
     const currentPort = window.location.port;
     
-    // If we're on port 8000, API is on same port
-    // If we're on different port, API is likely on 8000
-    const apiPort = (currentPort === '8000' || hostname === 'localhost') ? '8000' : '8000';
-    
-    return `${protocol}//${hostname}:${apiPort}`;
+    // Always use the same hostname as the frontend
+    // API is always on port 8000
+    return `${protocol}//${hostname}:8000`;
 }
 
 const API_BASE_URL = getApiBaseUrl();
 
+console.log('Current location:', window.location.href);
 console.log('API Base URL:', API_BASE_URL);
 
 // DOM Elements
