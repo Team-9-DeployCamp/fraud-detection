@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   # MLflow Tracking Server
   mlflow-server:
@@ -22,12 +24,6 @@ services:
       --port 5000
     networks:
       - fraud-detection-network
-    healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:5000/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
     restart: unless-stopped
 
   # Fraud Detection API
@@ -40,35 +36,22 @@ services:
       - "8000:8000"
     volumes:
       - ./models:/app/models
-      - ./config:/app/config
+      - ./configs:/app/configs
       - ./dataset:/app/dataset
+      - ./mlruns:/app/mlruns
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow-server:5000
+      - ENVIRONMENT=production
     depends_on:
-      mlflow-server:
-        condition: service_healthy
+      - mlflow-server
     command: >
       uvicorn src.api:app
       --host 0.0.0.0
       --port 8000
-      --reload
     networks:
       - fraud-detection-network
-    healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
     restart: unless-stopped
-    environment:
-      - MLFLOW_TRACKING_URI=http://mlflow-server:5000
-      - ENVIRONMENT=production
 
 networks:
   fraud-detection-network:
     driver: bridge
-
-volumes:
-  mlflow-data:
-  model-data:
