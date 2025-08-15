@@ -1,0 +1,53 @@
+data_path: dataset/raw/fraud_detection.csv
+dataset_fraud_detection_cleaned_path: dataset/processed/fraud_detection_cleaned.pkl
+
+# Debug related
+print_debug: true
+
+# column by data type related
+float_columns: 
+- amount
+
+int_columns: 
+- label
+
+categorical_columns:
+- merchant_type
+- device_type
+
+label: label
+
+range_amount:
+- 0
+- 900
+
+range_label:
+- 0
+- 1
+
+train_set_path:
+  - dataset/processed/X_train.pkl
+  - dataset/processed/y_train.pkl
+
+valid_set_path:
+  - dataset/processed/X_valid.pkl
+  - dataset/processed/y_valid.pkl
+
+test_set_path:
+  - dataset/processed/X_test.pkl
+  - dataset/processed/y_test.pkl
+
+# Model and encoder paths
+model_path: src/models/fraud_detection_model.pkl
+production_model_path: src/models/dt_tuned_best.pkl
+merchant_encoder_path: src/models/merchant_encoder.pkl
+device_encoder_path: src/models/device_encoder.pkl
+
+mlflow:
+  tracking_uri: http://mlflow-server:5000
+  experiment_name: fraud_detection
+
+features:
+  - amount
+  - merchant_type
+  - device_type

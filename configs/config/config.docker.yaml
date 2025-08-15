@@ -1,0 +1,49 @@
+# Docker Compose specific configuration
+data_path: dataset/raw/fraud_detection.csv
+dataset_fraud_detection_cleaned_path: dataset/processed/fraud_detection_cleaned.pkl
+
+# Debug related
+print_debug: true
+
+# column by data type related
+float_columns: 
+- amount
+
+int_columns: 
+- label
+
+categorical_columns:
+- merchant_type
+- device_type
+
+label: label
+
+range_amount:
+  - 0
+  - 50000
+
+preprocessing:
+  log_transformation: True
+  scaling: True
+  smote: True
+
+# Data split
+data_split:
+  test_size: 0.2
+  valid_size: 0.2
+  random_state: 42
+
+# Model and encoder paths
+model_path: src/models/fraud_detection_model.pkl
+merchant_encoder_path: src/models/merchant_encoder.pkl
+device_encoder_path: src/models/device_encoder.pkl
+
+# MLflow configuration for Docker
+mlflow:
+  tracking_uri: http://mlflow-server:5000
+  experiment_name: fraud_detection
+
+features:
+  - amount
+  - merchant_type
+  - device_type

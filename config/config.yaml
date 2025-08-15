@@ -39,5 +39,15 @@ test_set_path:
 
 # Model and encoder paths
 model_path: src/models/fraud_detection_model.pkl
+production_model_path: src/models/dt_tuned_best.pkl
 merchant_encoder_path: src/models/merchant_encoder.pkl
 device_encoder_path: src/models/device_encoder.pkl
+
+mlflow:
+  tracking_uri: http://mlflow-server:5000
+  experiment_name: fraud_detection
+
+features:
+  - amount
+  - merchant_type
+  - device_type

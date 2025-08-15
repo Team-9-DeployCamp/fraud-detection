@@ -1,0 +1,69 @@
+services:
+  # MLflow Tracking Server
+  mlflow-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.mlflow
+    container_name: fraud-detection-mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlruns:/app/mlruns
+      - ./mlflow.db:/app/mlflow.db
+      - ./models:/app/models
+    environment:
+      - MLFLOW_BACKEND_STORE_URI=sqlite:///mlflow.db
+      - MLFLOW_DEFAULT_ARTIFACT_ROOT=./mlruns
+    command: >
+      mlflow server
+      --backend-store-uri sqlite:///mlflow.db
+      --default-artifact-root ./mlruns
+      --host 0.0.0.0
+      --port 5000
+    networks:
+      - fraud-detection-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Fraud Detection API
+  fraud-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: fraud-detection-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models:/app/models
+      - ./config:/app/config
+      - ./dataset:/app/dataset
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow-server:5000
+    depends_on:
+      mlflow-server:
+        condition: service_healthy
+    command: >
+      uvicorn src.api:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+    networks:
+      - fraud-detection-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  fraud-detection-network:
+    driver: bridge
+
+volumes:
+  mlflow-data:
+  model-data:

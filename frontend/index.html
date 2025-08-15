@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fraud Detection System</title>
+    <link rel="stylesheet" href="static/css/style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-content">
+                <i class="fas fa-shield-alt header-icon"></i>
+                <h1>Credit Card Fraud Detection</h1>
+                <p>AI-powered transaction analysis system</p>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="form-container">
+                <div class="form-header">
+                    <h2><i class="fas fa-credit-card"></i> Transaction Details</h2>
+                    <p>Enter transaction information to analyze fraud risk</p>
+                </div>
+
+                <form id="fraudForm" class="fraud-form">
+                    <div class="form-group">
+                        <label for="amount">
+                            <i class="fas fa-dollar-sign"></i>
+                            Transaction Amount
+                        </label>
+                        <input 
+                            type="number" 
+                            id="amount" 
+                            name="amount" 
+                            step="0.01" 
+                            min="0" 
+                            placeholder="Enter amount (e.g., 1500.50)"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="merchant_type">
+                            <i class="fas fa-store"></i>
+                            Merchant Type
+                        </label>
+                        <select id="merchant_type" name="merchant_type" required>
+                            <option value="">Select merchant type</option>
+                            <option value="clothing">Clothing</option>
+                            <option value="electronics">Electronics</option>
+                            <option value="groceries">Groceries</option>
+                            <option value="travel">Travel</option>
+                            <option value="others">Others</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="device_type">
+                            <i class="fas fa-mobile-alt"></i>
+                            Device Type
+                        </label>
+                        <select id="device_type" name="device_type" required>
+                            <option value="">Select device type</option>
+                            <option value="desktop">Desktop</option>
+                            <option value="mobile">Mobile</option>
+                            <option value="tablet">Tablet</option>
+                        </select>
+                    </div>
+
+                    <button type="submit" class="submit-btn" id="submitBtn">
+                        <i class="fas fa-search"></i>
+                        Analyze Transaction
+                    </button>
+                </form>
+            </div>
+
+            <div class="result-container" id="resultContainer" style="display: none;">
+                <div class="result-header">
+                    <h2><i class="fas fa-chart-line"></i> Analysis Result</h2>
+                </div>
+                
+                <div class="result-content" id="resultContent">
+                    <!-- Results will be populated here -->
+                </div>
+
+                <button class="new-analysis-btn" id="newAnalysisBtn">
+                    <i class="fas fa-plus"></i>
+                    New Analysis
+                </button>
+            </div>
+
+            <div class="loading" id="loadingIndicator" style="display: none;">
+                <div class="spinner"></div>
+                <p>Analyzing transaction...</p>
+            </div>
+
+            <div class="error-container" id="errorContainer" style="display: none;">
+                <div class="error-content">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <h3>Error</h3>
+                    <p id="errorMessage"></p>
+                    <button class="retry-btn" id="retryBtn">
+                        <i class="fas fa-redo"></i>
+                        Try Again
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <div class="footer-content">
+                <p>&copy; Team 9 DeployCamp. Powered by MLflow and FastAPI.</p>
+                <div class="footer-links">
+                    <a href="/docs" target="_blank">
+                        <i class="fas fa-book"></i>
+                        API Documentation
+                    </a>
+                    <a href="http://localhost:5000" target="_blank">
+                        <i class="fas fa-chart-bar"></i>
+                        MLflow Dashboard
+                    </a>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <script src="static/js/script.js"></script>
+</body>
+</html>

@@ -6,7 +6,7 @@ import os
 # Get the absolute path to the config file
 script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir)
-config_dir = os.path.join(project_root, 'config', 'config.yaml')
+config_dir = os.path.join(project_root, 'configs', 'config', 'config.yaml')
 
 def time_stamp() -> datetime:
     # Return current date and time

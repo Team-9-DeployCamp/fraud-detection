@@ -1,230 +1,334 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import pandas as pd
-import sys
+import mlflow
+import mlflow.sklearn
+from mlflow.tracking import MlflowClient
+from typing import List, Dict
 import os
-from .inference import FraudDetectionPredictor
-from . import util as utils
-from typing import List, Optional
+
+# Now import from src
+from src.util import load_config, print_debug, pickle_load
+from src.inference import FraudDetectionPredictor
 import uvicorn
 
-# Initialize FastAPI app
+# Load config
+cfg = load_config()
+
+# Setup MLflow
+mlflow.set_tracking_uri(cfg["mlflow"]["tracking_uri"])
+
 app = FastAPI(
-    title="Fraud Detection API",
-    description="API for detecting fraudulent transactions using machine learning",
+    title="Fraud Detection API with MLflow",
+    description="API for predicting credit card fraud using MLflow models",
     version="1.0.0"
 )
 
-# Initialize predictor
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify exact origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Mount static files for frontend
+frontend_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend")
+if os.path.exists(frontend_dir):
+    app.mount("/static", StaticFiles(directory=os.path.join(frontend_dir, "static")), name="static")
+
+class TransactionInput(BaseModel):
+    amount: float
+    merchant_type: str
+    device_type: str
+
+class PredictionResponse(BaseModel):
+    is_fraud: bool
+    fraud_probability: float
+    risk_level: str
+    transaction_details: Dict
+
+class MLflowFraudPredictor:
+    """MLflow-based Fraud Detection Predictor that uses inference.py"""
+    
+    def __init__(self):
+        self.config = load_config()
+        self.model = None
+        self.model_info = {}
+        
+        # Initialize inference predictor for preprocessing and encoding
+        try:
+            self.inference_predictor = FraudDetectionPredictor()
+            print_debug("✓ Inference predictor initialized successfully")
+        except Exception as e:
+            print_debug(f"✗ Error initializing inference predictor: {e}")
+            raise
+    
+    def load_best_model(self):
+        """Load the best model from MLflow"""
+        try:
+            # Get experiment
+            experiment = mlflow.get_experiment_by_name(self.config["mlflow"]["experiment_name"])
+            
+            if not experiment:
+                print_debug("⚠ Experiment not found, using model from inference.py")
+                # Use model from inference predictor
+                self.model = self.inference_predictor.model
+                self.model_info = {
+                    "model_source": "inference_predictor",
+                    "model_type": type(self.model).__name__
+                }
+                print_debug("✓ Model loaded from inference predictor")
+                return True
+            
+            # Search for best run based on F1 score
+            runs = mlflow.search_runs(
+                experiment_ids=[experiment.experiment_id],
+                filter_string="",
+                order_by=["metrics.valid_f1 DESC"],
+                max_results=1
+            )
+            
+            if len(runs) == 0:
+                print_debug("No runs found, using model from inference.py")
+                self.model = self.inference_predictor.model
+                self.model_info = {"model_source": "inference_fallback"}
+                return True
+            
+            best_run = runs.iloc[0]
+            run_id = best_run['run_id']
+            
+            # Load model from MLflow
+            model_uri = f"runs:/{run_id}/model"
+            self.model = mlflow.sklearn.load_model(model_uri)
+            
+            # Store model info
+            self.model_info = {
+                "run_id": run_id,
+                "model_variant": best_run.get('tags.model_variant', 'unknown'),
+                "f1_score": float(best_run['metrics.valid_f1']),
+                "accuracy": float(best_run['metrics.valid_accuracy']),
+                "model_uri": model_uri,
+                "model_source": "mlflow"
+            }
+            
+            print_debug(f"✓ Model loaded from MLflow: {self.model_info['model_variant']}")
+            print_debug(f"✓ F1-Score: {self.model_info['f1_score']:.4f}")
+            
+            return True
+            
+        except Exception as e:
+            print_debug(f"✗ Error loading model from MLflow: {e}")
+            print_debug("Trying fallback to inference predictor...")
+            try:
+                self.model = self.inference_predictor.model
+                self.model_info = {
+                    "model_source": "inference_fallback",
+                    "model_type": type(self.model).__name__,
+                    "error": str(e)
+                }
+                print_debug("✓ Model loaded from inference fallback")
+                return True
+            except Exception as inference_error:
+                print_debug(f"✗ Inference fallback also failed: {inference_error}")
+                return False
+
+    
+    def predict_single(self, amount, merchant_type, device_type):
+        """Predict fraud for a single transaction using inference.py"""
+        if self.model is None:
+            raise RuntimeError("Model not loaded")
+        
+        try:
+            print_debug(f"Input transaction: amount={amount}, merchant={merchant_type}, device={device_type}")
+            
+            # Use inference predictor for preprocessing and prediction
+            # But replace the model with MLflow model if available
+            original_model = self.inference_predictor.model
+            self.inference_predictor.model = self.model
+            
+            # Use inference predictor's predict_single method
+            result = self.inference_predictor.predict_single(amount, merchant_type, device_type)
+            
+            # Restore original model
+            self.inference_predictor.model = original_model
+            
+            print_debug(f"Final result: {result}")
+            return result
+            
+        except Exception as e:
+            print_debug(f"✗ Error in predict_single: {e}")
+            raise
+    
+    def get_model_info(self):
+        """Get information about the loaded model"""
+        try:
+            base_info = {
+                'model_type': type(self.model).__name__ if self.model else 'Not loaded',
+                'merchant_categories': list(self.inference_predictor.merchant_encoder.categories_[0]),
+                'device_categories': list(self.inference_predictor.device_encoder.categories_[0]),
+            }
+            base_info.update(self.model_info)
+            return base_info
+        except Exception as e:
+            return {
+                'error': str(e),
+                'model_type': 'Error loading info'
+            }
+
+# Initialize global predictor
 predictor = None
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize the predictor when the API starts"""
+    """Initialize predictor on startup"""
     global predictor
     try:
-        predictor = FraudDetectionPredictor()
-        print("✅ Fraud Detection API started successfully!")
-        print("📊 Model loaded and ready for predictions")
+        print_debug("🚀 Starting Fraud Detection API...")
+        print_debug("✓ API startup completed successfully")
+        # Initialize predictor lazily on first request to avoid blocking startup
     except Exception as e:
-        print(f"❌ Error loading model: {e}")
-        predictor = None
+        print_debug(f"⚠ Warning: Failed during startup: {e}")
 
-# Pydantic models for request/response
-class TransactionData(BaseModel):
-    amount: float = Field(..., description="Transaction amount", example=150.50)
-    merchant_type: str = Field(..., description="Type of merchant", example="electronics")
-    device_type: str = Field(..., description="Type of device used", example="mobile")
+def get_predictor():
+    """Get or initialize predictor lazily"""
+    global predictor
+    if predictor is None:
+        try:
+            print_debug("🔄 Initializing predictor...")
+            predictor = MLflowFraudPredictor()
+            success = predictor.load_best_model()
+            if not success:
+                print_debug("⚠ Warning: Failed to load any model")
+            else:
+                print_debug("✓ Predictor initialized successfully")
+        except Exception as e:
+            print_debug(f"⚠ Warning: Failed to initialize predictor: {e}")
+            raise HTTPException(status_code=500, detail=f"Model initialization failed: {str(e)}")
+    return predictor
 
-class BatchTransactionData(BaseModel):
-    transactions: List[TransactionData] = Field(..., description="List of transactions to analyze")
-
-class PredictionResponse(BaseModel):
-    is_fraud: bool = Field(..., description="Whether the transaction is predicted as fraud")
-    fraud_probability: float = Field(..., description="Probability of fraud (0-1)")
-    risk_level: str = Field(..., description="Risk level: Low, Medium, or High")
-    transaction_details: dict = Field(..., description="Original transaction details")
-
-class BatchPredictionResponse(BaseModel):
-    predictions: List[dict] = Field(..., description="List of prediction results")
-    summary: dict = Field(..., description="Summary statistics")
-
-class HealthResponse(BaseModel):
-    status: str = Field(..., description="Health status")
-    model_loaded: bool = Field(..., description="Whether the model is loaded")
-    model_info: Optional[dict] = Field(None, description="Model information")
-
-# API Endpoints
-@app.get("/", response_model=dict)
-async def root():
-    """Root endpoint with API information"""
+@app.get("/")
+def root():
     return {
-        "message": "Fraud Detection API is running! 🚀",
-        "docs": "/docs",
-        "health": "/health",
-        "endpoints": {
-            "single_prediction": "/predict",
-            "batch_prediction": "/predict_batch"
+        "message": "Fraud Detection API with MLflow",
+        "status": "ready" if predictor and predictor.model else "model not loaded",
+        "model_info": predictor.get_model_info() if predictor else None,
+        "usage": {
+            "prediction_endpoint": "/predict",
+            "models_endpoint": "/models",
+            "health_endpoint": "/health",
+            "frontend_url": "/app",
+            "example_request": {
+                "amount": 100.50,
+                "merchant_type": "electronics",
+                "device_type": "mobile"
+            }
         }
     }
 
-@app.post("/predict", response_model=PredictionResponse)
-async def predict_fraud(transaction: TransactionData):
-    """
-    Predict fraud for a single transaction
+@app.get("/app")
+def frontend():
+    """Serve the frontend application"""
+    frontend_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend")
+    frontend_file = os.path.join(frontend_dir, "index.html")
     
-    - **amount**: Transaction amount in currency units
-    - **merchant_type**: Category of the merchant (e.g., electronics, groceries)
-    - **device_type**: Device used for transaction (e.g., mobile, desktop, tablet)
-    
-    Returns fraud prediction with probability and risk level.
-    """
-    if predictor is None:
-        raise HTTPException(
-            status_code=503, 
-            detail="Model not loaded. Please check server logs and restart the service."
-        )
-    
+    if os.path.exists(frontend_file):
+        return FileResponse(frontend_file)
+    else:
+        raise HTTPException(status_code=404, detail="Frontend not found")
+
+@app.get("/health")
+def health_check():
     try:
-        result = predictor.predict_single(
+        # For health check, don't initialize the full predictor, just check basic connectivity
+        return {
+            "status": "healthy",
+            "api_ready": True,
+            "mlflow_uri": cfg["mlflow"]["tracking_uri"]
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "error": str(e)
+        }
+
+@app.get("/models")
+def list_available_models():
+    """List all available models from MLflow"""
+    try:
+        experiment = mlflow.get_experiment_by_name(cfg["mlflow"]["experiment_name"])
+        
+        if not experiment:
+            return {"models": [], "message": "No MLflow experiment found"}
+        
+        runs = mlflow.search_runs(
+            experiment_ids=[experiment.experiment_id],
+            order_by=["metrics.valid_f1 DESC"]
+        )
+        
+        models = []
+        for _, run in runs.iterrows():
+            models.append({
+                "run_id": run['run_id'],
+                "model_variant": run.get('tags.model_variant', 'unknown'),
+                "f1_score": float(run.get('metrics.valid_f1', 0.0)),
+                "accuracy": float(run.get('metrics.valid_accuracy', 0.0)),
+                "start_time": run['start_time']
+            })
+        
+        return {"models": models}
+        
+    except Exception as e:
+        return {"models": [], "error": str(e)}
+
+@app.post("/predict", response_model=PredictionResponse)
+def predict_fraud(transaction: TransactionInput):
+    """Predict fraud for a single transaction"""
+    try:
+        # Get or initialize predictor lazily
+        current_predictor = get_predictor()
+        
+        result = current_predictor.predict_single(
             amount=transaction.amount,
             merchant_type=transaction.merchant_type,
             device_type=transaction.device_type
         )
+        
         return PredictionResponse(**result)
-    except Exception as e:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Prediction error: {str(e)}"
-        )
-
-@app.post("/predict_batch", response_model=BatchPredictionResponse)
-async def predict_fraud_batch(batch_data: BatchTransactionData):
-    """
-    Predict fraud for multiple transactions in batch
     
-    Send multiple transactions at once for efficient processing.
-    Returns predictions for all transactions with summary statistics.
-    """
-    if predictor is None:
-        raise HTTPException(
-            status_code=503, 
-            detail="Model not loaded. Please check server logs and restart the service."
-        )
+    except Exception as e:
+        print_debug(f"API Prediction error: {e}")
+        raise HTTPException(status_code=400, detail=f"Prediction error: {str(e)}")
+
+@app.post("/predict_batch")
+def predict_batch(transactions: List[TransactionInput]):
+    """Predict fraud for multiple transactions"""
+    if not predictor or not predictor.model:
+        raise HTTPException(status_code=503, detail="Model not loaded")
     
     try:
-        # Convert to DataFrame
-        transactions_dict = [t.dict() for t in batch_data.transactions]
-        data = pd.DataFrame(transactions_dict)
-        
-        # Make predictions
-        predictions, probabilities = predictor.predict(data)
-        
-        # Format results
         results = []
-        fraud_count = 0
-        high_risk_count = 0
+        for i, transaction in enumerate(transactions):
+            result = predictor.predict_single(
+                amount=transaction.amount,
+                merchant_type=transaction.merchant_type,
+                device_type=transaction.device_type
+            )
+            result['transaction_id'] = i
+            results.append(result)
         
-        for i, (pred, prob) in enumerate(zip(predictions, probabilities)):
-            # Determine risk level
-            if prob > 0.7:
-                risk_level = 'High'
-                high_risk_count += 1
-            elif prob > 0.3:
-                risk_level = 'Medium'
-            else:
-                risk_level = 'Low'
-            
-            if pred:
-                fraud_count += 1
-            
-            results.append({
-                'transaction_id': i,
-                'is_fraud': bool(pred),
-                'fraud_probability': float(prob),
-                'risk_level': risk_level,
-                'transaction_details': transactions_dict[i]
-            })
-        
-        # Calculate summary statistics
-        total_transactions = len(results)
-        summary = {
-            'total_transactions': total_transactions,
-            'fraud_detected': fraud_count,
-            'fraud_percentage': round((fraud_count / total_transactions) * 100, 2),
-            'high_risk_transactions': high_risk_count,
-            'avg_fraud_probability': round(float(probabilities.mean()), 3),
-            'max_fraud_probability': round(float(probabilities.max()), 3)
+        return {
+            "results": results,
+            "model_info": predictor.get_model_info(),
+            "total_transactions": len(results)
         }
-        
-        return BatchPredictionResponse(predictions=results, summary=summary)
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Batch prediction error: {str(e)}"
-        )
-
-@app.get("/health", response_model=HealthResponse)
-async def health_check():
-    """
-    Health check endpoint
     
-    Returns the current status of the API and model information.
-    """
-    model_info = None
-    if predictor is not None:
-        try:
-            model_info = predictor.get_model_info()
-        except:
-            model_info = None
-    
-    return HealthResponse(
-        status="healthy" if predictor is not None else "unhealthy",
-        model_loaded=predictor is not None,
-        model_info=model_info
-    )
-
-@app.get("/model/info")
-async def get_model_info():
-    """Get detailed information about the loaded model"""
-    if predictor is None:
-        raise HTTPException(
-            status_code=503, 
-            detail="Model not loaded"
-        )
-    
-    try:
-        return predictor.get_model_info()
     except Exception as e:
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Error getting model info: {str(e)}"
-        )
-
-# Main function to run the API
-def run_api():
-    """Run the FastAPI server"""
-    try:
-        config = utils.load_config()
-        host = config.get('api_host', '0.0.0.0')
-        port = config.get('api_port', 8000)
-        
-        print(f"🚀 Starting Fraud Detection API server...")
-        print(f"📍 Host: {host}")
-        print(f"🔌 Port: {port}")
-        print(f"📖 Documentation: http://{host}:{port}/docs")
-        print(f"🔍 Interactive API: http://{host}:{port}/redoc")
-        
-        uvicorn.run(
-            app, 
-            host=host, 
-            port=port,
-            reload=False,
-            log_level="info"
-        )
-    except Exception as e:
-        print(f"❌ Error starting API server: {e}")
+        raise HTTPException(status_code=400, detail=f"Batch prediction error: {str(e)}")
 
 if __name__ == "__main__":
-    run_api()
+    uvicorn.run(app, host="0.0.0.0", port=8000)
