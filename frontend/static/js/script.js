@@ -1,8 +1,8 @@
 // Configuration - Dynamic API URL with proper port handling
 function getApiBaseUrl() {
-    const protocol = window.location.protocol;
-    const hostname = window.location.hostname;
-    const currentPort = window.location.port;
+    const protocol = "http";
+    const hostname = "103.150.90.220";
+    const currentPort = 8000;
     
     // Always use the same hostname as the frontend
     // API is always on port 8000
