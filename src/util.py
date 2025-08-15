@@ -7,21 +7,31 @@ def time_stamp() -> datetime:
     # Return current date and time
     return datetime.now()
 
-def load_config() -> dict: 
-    # Try to load yaml file
-    # Get the absolute path to the config file
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(script_dir)
-    config_dir = os.path.join(project_root, 'configs', 'config', 'config.yaml')
-
-    try:
-        with open(config_dir, "r") as file:
-            config = yaml.safe_load(file)
-    except FileNotFoundError as fe:
-        raise RuntimeError(f"Parameters file not found in path: {config_dir}")
-
-    # Return params in dict format
-    return config
+def load_config() -> dict:
+    # Try multiple possible config paths
+    possible_paths = [
+        '/app/configs/config.yaml',  # Docker path
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'configs', 'config.yaml'),  # Local path
+        'configs/config.yaml'  # Relative path
+    ]
+    
+    for config_path in possible_paths:
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, "r") as file:
+                    config = yaml.safe_load(file)
+                    return config
+            except Exception:
+                continue
+    
+    # Default config if none found
+    return {
+        "print_debug": True,
+        "mlflow": {
+            "tracking_uri": "http://mlflow-server:5000",
+            "experiment_name": "fraud_detection"
+        }
+    }
 
 def pickle_load(file_path: str):
     # Convert relative path to absolute path if needed
