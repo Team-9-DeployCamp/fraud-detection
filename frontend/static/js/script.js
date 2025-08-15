@@ -106,7 +106,7 @@ function hideInputError(input) {
     }
 }
 
-// Check API health
+// Check API health with better CORS handling
 async function checkAPIHealth() {
     console.log('Checking API health at:', `${API_BASE_URL}/health`);
     
@@ -114,7 +114,13 @@ async function checkAPIHealth() {
         const response = await fetch(`${API_BASE_URL}/health`, {
             method: 'GET',
             mode: 'cors',
+            credentials: 'omit',
+            headers: {
+                'Accept': 'application/json',
+            }
         });
+        
+        console.log('Health check response:', response.status, response.ok);
         
         if (response.ok) {
             const healthData = await response.json();
@@ -123,11 +129,12 @@ async function checkAPIHealth() {
             console.warn('API health check failed:', response.status, response.statusText);
         }
     } catch (error) {
-        console.error('API is not accessible:', error);
+        console.error('API health check error:', error);
         
         // Show user-friendly error for network issues
         if (error.name === 'TypeError' && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
-            showError(`Cannot connect to fraud detection service at ${API_BASE_URL}. Please check if the server is running and accessible.`);
+            console.error(`Cannot connect to fraud detection service at ${API_BASE_URL}. CORS or network issue.`);
+            // Don't show error to user immediately, let them try the form
         }
     }
 }
@@ -198,7 +205,7 @@ function getFormData() {
     };
 }
 
-// Predict fraud via API
+// Predict fraud via API with enhanced CORS handling
 async function predictFraud(data) {
     console.log('Making API request to:', `${API_BASE_URL}/predict`);
     console.log('Request data:', data);
@@ -209,17 +216,27 @@ async function predictFraud(data) {
             headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json',
+                'Access-Control-Request-Method': 'POST',
+                'Access-Control-Request-Headers': 'Content-Type, Accept'
             },
             body: JSON.stringify(data),
-            mode: 'cors', // Explicitly set CORS mode
+            mode: 'cors',
+            credentials: 'omit', // Don't send credentials for cross-origin
         });
         
+        console.log('Response received:', response);
         console.log('Response status:', response.status);
-        console.log('Response headers:', response.headers);
+        console.log('Response ok:', response.ok);
         
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+            let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+            try {
+                const errorData = await response.json();
+                errorMessage = errorData.detail || errorData.message || errorMessage;
+            } catch (e) {
+                console.log('Could not parse error response as JSON');
+            }
+            throw new Error(errorMessage);
         }
         
         const result = await response.json();
@@ -228,10 +245,12 @@ async function predictFraud(data) {
         
     } catch (error) {
         console.error('API request failed:', error);
+        console.error('Error type:', error.name);
+        console.error('Error message:', error.message);
         
         // Provide more specific error messages
         if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-            throw new Error(`Cannot connect to API server at ${API_BASE_URL}. Please check if the server is running.`);
+            throw new Error(`CORS Error: Cannot connect to API server at ${API_BASE_URL}. Please check CORS configuration.`);
         } else if (error.name === 'TypeError' && error.message.includes('NetworkError')) {
             throw new Error(`Network error: Cannot reach API server at ${API_BASE_URL}`);
         } else {
