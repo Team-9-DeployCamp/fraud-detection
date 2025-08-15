@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
@@ -284,6 +284,18 @@ def list_available_models():
         
     except Exception as e:
         return {"models": [], "error": str(e)}
+
+@app.options("/predict")
+def predict_options():
+    """Handle CORS preflight for prediction endpoint"""
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Accept",
+        }
+    )
 
 @app.post("/predict", response_model=PredictionResponse)
 def predict_fraud(transaction: TransactionInput):
